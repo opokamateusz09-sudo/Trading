@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TradePro - Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { background-color: #050a18; color: #e2e8f0; font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; }
+        .card { background-color: #0b1224; border: 1px solid #1e293b; border-radius: 12px; }
+        .input-field { background-color: #050a18; border: 1px solid #1e293b; color: white; border-radius: 6px; padding: 12px; width: 100%; outline: none; transition: 0.2s; font-size: 14px; }
+        .input-field:focus { border-color: #2563eb; }
+        .text-muted { color: #64748b; }
+        .type-btn { transition: 0.3s; border: 1px solid #1e293b; cursor: pointer; }
+        .active-long { background-color: #10b981 !important; color: white !important; border-color: #10b981 !important; }
+        .active-short { background-color: #ef4444 !important; color: white !important; border-color: #ef4444 !important; }
+        .calendar-day { min-height: 35px; display: flex; align-items: center; justify-content: center; border-radius: 6px; position: relative; }
+        .today { border: 1px solid #2563eb; background: rgba(37, 99, 235, 0.1); color: #60a5fa !important; font-weight: bold; }
+        .has-trade::after { content: ''; width: 5px; height: 5px; background: #10b981; border-radius: 50%; position: absolute; bottom: 4px; box-shadow: 0 0 5px #10b981; }
+        
+        .balance-badge { background: #0b1224; border: 1px solid #1e293b; padding: 6px 12px; border-radius: 8px; cursor: pointer; transition: all 0.2s; }
+        .balance-badge:hover { border-color: #3b82f6; background: #0f172a; }
+        .edit-popover { display: none; position: absolute; top: 110%; right: 0; background: #1e293b; border: 1px solid #3b82f6; padding: 12px; border-radius: 8px; z-index: 50; box-shadow: 0 10px 25px rgba(0,0,0,0.5); width: 180px; }
+        
+        .img-preview { width: 100%; height: 100px; object-fit: cover; border-radius: 8px; border: 1px dashed #1e293b; display: none; margin-top: 8px; }
+        .trade-img { width: 100%; border-radius: 8px; margin-top: 10px; cursor: pointer; transition: transform 0.2s; }
+        .trade-img:hover { transform: scale(1.02); }
+    </style>
+</head>
+<body class="p-4 md:p-8" onclick="closeBalanceEdit(event)">
+
+    <header class="flex justify-between items-center max-w-7xl mx-auto mb-8 relative">
+        <div class="flex items-center gap-2 text-blue-500 font-bold text-2xl tracking-tight">
+            <i data-lucide="trending-up" class="w-7 h-7"></i> TradePro
+        </div>
+        
+        <div class="relative" onclick="event.stopPropagation()">
+            <div class="balance-badge flex items-center gap-3" onclick="toggleBalanceEdit()">
+                <div class="bg-blue-500/10 p-1.5 rounded">
+                    <i data-lucide="wallet" class="text-blue-500 w-4 h-4"></i>
+                </div>
+                <div class="flex flex-col items-end">
+                    <span class="text-[9px] uppercase font-bold text-slate-500 leading-none mb-1">Kapitał</span>
+                    <span id="displayBalance" class="font-mono font-bold text-white text-sm">$10 000</span>
+                </div>
+            </div>
+            
+            <div id="balancePopover" class="edit-popover">
+                <label class="text-[9px] uppercase font-bold text-slate-400 block mb-2">Zmień balans</label>
+                <div class="flex gap-2">
+                    <input type="number" id="inputBalance" class="bg-slate-900 border border-slate-700 text-white text-xs p-2 rounded w-full outline-none focus:border-blue-500" value="10000">
+                    <button onclick="saveBalance()" class="bg-blue-600 p-2 rounded hover:bg-blue-500"><i data-lucide="check" class="w-4 h-4 text-white"></i></button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto space-y-6">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="space-y-6">
+                <div class="card p-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-[11px] font-bold uppercase tracking-widest text-muted">Kalkulator Pozycji</h2>
+                        <div class="flex bg-[#050a18] rounded-lg p-1 border border-slate-800">
+                            <button id="calcLong" onclick="setCalcType('long')" class="px-4 py-1 text-[10px] font-bold uppercase rounded active-long type-btn">Long</button>
+                            <button id="calcShort" onclick="setCalcType('short')" class="px-4 py-1 text-[10px] font-bold uppercase rounded text-muted type-btn ml-1">Short</button>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div class="space-y-1">
+                            <label class="text-[9px] uppercase font-bold text-muted ml-1">Cena Wejścia</label>
+                            <input type="number" id="cEntry" class="input-field" placeholder="0.00" oninput="runQuickCalc()">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-[9px] uppercase font-bold text-muted ml-1">Wielkość (Lot)</label>
+                            <input type="number" id="cSize" class="input-field" placeholder="0.00" step="0.01" oninput="runQuickCalc()">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div class="space-y-1">
+                            <label class="text-[9px] uppercase font-bold text-red-500 ml-1">Stop Loss</label>
+                            <input type="number" id="cSL" class="input-field" placeholder="0.00" oninput="runQuickCalc()">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-[9px] uppercase font-bold text-emerald-500 ml-1">Take Profit</label>
+                            <input type="number" id="cTP" class="input-field" placeholder="0.00" oninput="runQuickCalc()">
+                        </div>
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[9px] uppercase font-bold text-muted ml-1">Dźwignia</label>
+                        <input type="number" id="cLev" class="input-field" value="100" oninput="runQuickCalc()">
+                    </div>
+                </div>
+
+                <div class="card p-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <div class="flex items-center gap-3">
+                            <h2 id="currentMonthYear" class="text-[11px] font-bold uppercase text-white tracking-widest">Kwiecień 2024</h2>
+                            <div class="flex gap-1">
+                                <button onclick="changeMonth(-1)" class="p-1 hover:bg-slate-800 rounded"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
+                                <button onclick="changeMonth(1)" class="p-1 hover:bg-slate-800 rounded"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
+                            </div>
+                        </div>
+                        <div id="calPnl" class="text-[11px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded">+$0.00</div>
+                    </div>
+                    <div class="grid grid-cols-7 gap-1 text-center mb-2">
+                        <div class="text-[9px] font-bold text-slate-600 uppercase">Pn</div>
+                        <div class="text-[9px] font-bold text-slate-600 uppercase">Wt</div>
+                        <div class="text-[9px] font-bold text-slate-600 uppercase">Śr</div>
+                        <div class="text-[9px] font-bold text-slate-600 uppercase">Cz</div>
+                        <div class="text-[9px] font-bold text-slate-600 uppercase">Pt</div>
+                        <div class="text-[9px] font-bold text-slate-600 uppercase">So</div>
+                        <div class="text-[9px] font-bold text-slate-600 uppercase">Nd</div>
+                    </div>
+                    <div id="calendar-days" class="grid grid-cols-7 gap-1 text-sm text-center"></div>
+                </div>
+            </div>
+
+            <div class="space-y-6">
+                <div class="card p-6">
+                    <h2 class="text-[11px] font-bold uppercase text-muted tracking-widest mb-6">Analiza Ryzyka</h2>
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="bg-emerald-500/5 border border-emerald-500/10 p-4 rounded-xl text-center">
+                                <div class="text-[9px] text-emerald-500 uppercase font-bold mb-1">Zysk przy TP</div>
+                                <div id="resProfit" class="text-2xl font-bold text-emerald-400">+$0.00</div>
+                            </div>
+                            <div class="bg-red-500/5 border border-red-500/10 p-4 rounded-xl text-center">
+                                <div class="text-[9px] text-red-500 uppercase font-bold mb-1">Strata przy SL</div>
+                                <div id="resLoss" class="text-2xl font-bold text-red-400">-$0.00</div>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="bg-slate-900/30 border border-slate-800 p-4 rounded-xl text-center">
+                                <div class="text-[9px] text-muted uppercase mb-1">Risk/Reward</div>
+                                <div id="cRR" class="text-xl font-bold text-blue-400">1:0.00</div>
+                            </div>
+                            <div class="bg-slate-900/30 border border-slate-800 p-4 rounded-xl text-center">
+                                <div class="text-[9px] text-muted uppercase mb-1">Ryzyko Konta</div>
+                                <div id="cRiskPerc" class="text-xl font-bold text-white">0%</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card p-6 min-h-[250px]">
+                    <h2 class="text-[11px] font-bold uppercase text-muted tracking-widest mb-4">Checklista</h2>
+                    <div class="flex gap-2 mb-4">
+                        <input type="text" id="todoIn" class="input-field py-2" placeholder="Dodaj warunek..." onkeypress="if(event.key==='Enter') addTodo()">
+                        <button onclick="addTodo()" class="bg-blue-600 px-4 rounded-lg hover:bg-blue-500"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                    </div>
+                    <div id="todoList" class="space-y-2 overflow-y-auto max-h-[150px]"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 border-t border-slate-800 pt-6">
+            <div class="card p-6">
+                <h2 class="text-[11px] font-bold uppercase tracking-widest text-muted mb-6">Zapisz zamknięty Trade</h2>
+                <div class="space-y-3">
+                    <div class="flex bg-[#050a18] rounded-lg p-1 border border-slate-800">
+                        <button id="saveLong" onclick="setSaveType('long')" class="flex-1 py-2 text-[10px] font-bold uppercase rounded active-long type-btn">Long</button>
+                        <button id="saveShort" onclick="setSaveType('short')" class="flex-1 py-2 text-[10px] font-bold uppercase rounded text-muted type-btn">Short</button>
+                    </div>
+                    <input type="date" id="sDate" class="input-field">
+                    <input type="text" id="sPair" placeholder="Para (np. BTC/USDT)" class="input-field">
+                    <div class="grid grid-cols-2 gap-2">
+                        <input type="number" id="sEntry" placeholder="Wejście" class="input-field">
+                        <input type="number" id="sExit" placeholder="Wyjście" class="input-field">
+                    </div>
+                    <input type="number" id="sLot" placeholder="Wielkość (Lot)" class="input-field">
+                    <textarea id="sNote" placeholder="Notatka..." class="input-field h-20 resize-none"></textarea>
+                    
+                    <div class="space-y-2">
+                        <input type="file" id="sImgInput" accept="image/*" class="hidden" onchange="handleImgPreview(this)">
+                        <button onclick="document.getElementById('sImgInput').click()" class="w-full border border-slate-800 hover:bg-slate-800 text-slate-400 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition">
+                            <i data-lucide="image" class="w-4 h-4"></i> Dodaj zrzut ekranu (opcjonalnie)
+                        </button>
+                        <img id="sImgPreview" class="img-preview" src="#" alt="Podgląd">
+                    </div>
+
+                    <button onclick="commitTrade()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-lg font-bold text-sm transition">Dodaj do dziennika</button>
+                </div>
+            </div>
+            
+            <div class="card p-6 lg:col-span-2">
+                <h2 class="text-[11px] font-bold uppercase tracking-widest text-muted mb-6">Historia</h2>
+                <div id="history" class="space-y-4 max-h-[700px] overflow-y-auto pr-2"></div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        lucide.createIcons();
+        let currentBalance = 10000;
+        let cMode = 'long', sMode = 'long', hist = [], total = 0, currentDate = new Date();
+        let currentImgData = null;
+
+        // --- OBSŁUGA DANYCH (LocalStorage) ---
+        function loadAllData() {
+            const savedHist = localStorage.getItem('tp_hist');
+            const savedBal = localStorage.getItem('tp_bal');
+            const savedTodo = localStorage.getItem('tp_todo');
+
+            if(savedHist) hist = JSON.parse(savedHist);
+            if(savedBal) {
+                currentBalance = parseFloat(savedBal);
+                document.getElementById('displayBalance').innerText = `$${currentBalance.toLocaleString()}`;
+                document.getElementById('inputBalance').value = currentBalance;
+            }
+            if(savedTodo) {
+                const todos = JSON.parse(savedTodo);
+                todos.forEach(t => createTodoElement(t.text, t.id));
+            }
+            updateUI();
+            renderCalendar();
+        }
+
+        function saveAllData() {
+            localStorage.setItem('tp_hist', JSON.stringify(hist));
+            localStorage.setItem('tp_bal', currentBalance);
+            const todos = Array.from(document.getElementById('todoList').children).map(div => ({
+                id: div.dataset.id,
+                text: div.querySelector('span').innerText
+            }));
+            localStorage.setItem('tp_todo', JSON.stringify(todos));
+        }
+
+        function toggleBalanceEdit() {
+            const pop = document.getElementById('balancePopover');
+            pop.style.display = pop.style.display === 'block' ? 'none' : 'block';
+        }
+
+        function closeBalanceEdit(e) {
+            document.getElementById('balancePopover').style.display = 'none';
+        }
+
+        function saveBalance() {
+            const val = parseFloat(document.getElementById('inputBalance').value) || 0;
+            currentBalance = val;
+            document.getElementById('displayBalance').innerText = `$${val.toLocaleString()}`;
+            saveAllData();
+            toggleBalanceEdit();
+            runQuickCalc();
+        }
+
+        function handleImgPreview(input) {
+            const preview = document.getElementById('sImgPreview');
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    preview.src = e.target.result;
+                    preview.style.display = 'block';
+                    currentImgData = e.target.result;
+                }
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        function setCalcType(t) {
+            cMode = t;
+            document.getElementById('calcLong').className = t==='long'?'px-4 py-1 text-[10px] font-bold uppercase rounded active-long type-btn':'px-4 py-1 text-[10px] font-bold uppercase rounded text-muted type-btn ml-1';
+            document.getElementById('calcShort').className = t==='short'?'px-4 py-1 text-[10px] font-bold uppercase rounded active-short type-btn ml-1':'px-4 py-1 text-[10px] font-bold uppercase rounded text-muted type-btn ml-1';
+            runQuickCalc();
+        }
+
+        function runQuickCalc() {
+            const entry = parseFloat(document.getElementById('cEntry').value) || 0;
+            const sl = parseFloat(document.getElementById('cSL').value) || 0;
+            const tp = parseFloat(document.getElementById('cTP').value) || 0;
+            const size = parseFloat(document.getElementById('cSize').value) || 0;
+            const lev = parseFloat(document.getElementById('cLev').value) || 1;
+
+            if(!entry || !size) {
+                document.getElementById('resProfit').innerText = "+$0.00";
+                document.getElementById('resLoss').innerText = "-$0.00";
+                document.getElementById('cRR').innerText = "1:0.00";
+                document.getElementById('cRiskPerc').innerText = "0%";
+                return;
+            }
+
+            const profit = (cMode === 'long' ? (tp - entry) : (entry - tp)) * size * lev;
+            const loss = (cMode === 'long' ? (entry - sl) : (sl - entry)) * size * lev;
+            const rr = loss > 0 ? (profit / loss).toFixed(2) : 0;
+            
+            document.getElementById('resProfit').innerText = `+$${Math.abs(profit).toFixed(2)}`;
+            document.getElementById('resLoss').innerText = `-$${Math.abs(loss).toFixed(2)}`;
+            document.getElementById('cRR').innerText = `1:${rr}`;
+            
+            const riskPerc = ((Math.abs(loss) / currentBalance) * 100).toFixed(2);
+            document.getElementById('cRiskPerc').innerText = riskPerc + "%";
+            document.getElementById('cRiskPerc').className = `text-xl font-bold ${riskPerc > 2 ? 'text-red-400' : 'text-emerald-400'}`;
+        }
+
+        function renderCalendar() {
+            const container = document.getElementById('calendar-days');
+            const label = document.getElementById('currentMonthYear');
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            const monthNames = ["Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec", "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień"];
+            label.innerText = `${monthNames[month]} ${year}`;
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            let startingDay = firstDay === 0 ? 6 : firstDay - 1;
+            container.innerHTML = '';
+            for (let i = 0; i < startingDay; i++) container.innerHTML += `<div></div>`;
+            for (let day = 1; day <= daysInMonth; day++) {
+                const isToday = day === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear();
+                const hasTrade = hist.some(t => { const d = new Date(t.timestamp); return d.getDate() === day && d.getMonth() === month && d.getFullYear() === year; });
+                container.innerHTML += `<div class="calendar-day ${isToday ? 'today' : ''} ${hasTrade ? 'has-trade' : ''}">${day}</div>`;
+            }
+        }
+
+        function changeMonth(offset) { currentDate.setMonth(currentDate.getMonth() + offset); renderCalendar(); }
+        function setSaveType(t) { sMode = t; document.getElementById('saveLong').className = t==='long'?'flex-1 py-2 text-[10px] font-bold uppercase rounded active-long type-btn':'flex-1 py-2 text-[10px] font-bold uppercase rounded text-muted type-btn'; document.getElementById('saveShort').className = t==='short'?'flex-1 py-2 text-[10px] font-bold uppercase rounded active-short type-btn':'flex-1 py-2 text-[10px] font-bold uppercase rounded text-muted type-btn'; }
+
+        function commitTrade() {
+            const pair = document.getElementById('sPair').value || 'N/A';
+            const e = parseFloat(document.getElementById('sEntry').value) || 0;
+            const ex = parseFloat(document.getElementById('sExit').value) || 0;
+            const l = parseFloat(document.getElementById('sLot').value) || 0;
+            const lev = parseFloat(document.getElementById('cLev').value) || 100;
+            const selDate = new Date(document.getElementById('sDate').value);
+            const res = (sMode === 'long' ? (ex-e) : (e-ex)) * l * lev;
+            
+            hist.push({ 
+                id: Date.now(),
+                pair, 
+                mode: sMode, 
+                pnl: res, 
+                entry: e, 
+                exit: ex, 
+                note: document.getElementById('sNote').value, 
+                img: currentImgData,
+                timestamp: selDate.getTime(), 
+                timeStr: selDate.toLocaleDateString('pl-PL', {day:'numeric', month:'short'}) 
+            });
+            
+            hist.sort((a, b) => b.timestamp - a.timestamp);
+            saveAllData();
+            updateUI(); 
+            renderCalendar();
+            
+            ['sPair','sEntry','sExit','sLot','sNote'].forEach(id => document.getElementById(id).value = "");
+            document.getElementById('sImgInput').value = "";
+            document.getElementById('sImgPreview').style.display = 'none';
+            currentImgData = null;
+        }
+
+        function deleteTrade(id) {
+            hist = hist.filter(t => t.id !== id);
+            saveAllData();
+            updateUI();
+            renderCalendar();
+        }
+
+        function updateUI() {
+            total = hist.reduce((acc, t) => acc + t.pnl, 0);
+            document.getElementById('history').innerHTML = hist.map(t => `
+                <div class="bg-slate-900/40 p-4 rounded-xl border border-slate-800 group relative">
+                    <button onclick="deleteTrade(${t.id})" class="absolute top-4 right-4 text-slate-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                    <div class="flex justify-between items-center pr-6">
+                        <div class="flex items-center gap-3">
+                            <span class="text-[9px] font-bold uppercase ${t.mode==='long'?'text-emerald-500':'text-red-500'} bg-slate-950 px-2 rounded">${t.mode}</span>
+                            <div>
+                                <div class="text-sm font-bold text-white">${t.pair}</div>
+                                <div class="text-[10px] text-slate-500 font-mono">${t.entry} → ${t.exit}</div>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <div class="font-bold text-sm ${t.pnl>=0?'text-emerald-400':'text-red-400'}">${t.pnl>=0?'+':''}${t.pnl.toFixed(2)} $</div>
+                            <div class="text-[8px] text-slate-600 uppercase">${t.timeStr}</div>
+                        </div>
+                    </div>
+                    ${t.note ? `<p class="mt-3 text-xs text-slate-400 italic border-l-2 border-slate-700 pl-2">${t.note}</p>` : ''}
+                    ${t.img ? `<img src="${t.img}" class="trade-img" onclick="window.open(this.src)">` : ''}
+                </div>
+            `).join('');
+            
+            const cal = document.getElementById('calPnl');
+            cal.innerText = (total>=0?'+$':'-$')+Math.abs(total).toFixed(2);
+            cal.className = `text-[11px] font-bold px-2 py-1 rounded ${total>=0?'text-emerald-500 bg-emerald-500/10':'text-red-500 bg-red-500/10'}`;
+            lucide.createIcons();
+        }
+
+        function addTodo() {
+            const input = document.getElementById('todoIn');
+            if(!input.value) return;
+            const id = Date.now();
+            createTodoElement(input.value, id);
+            input.value = "";
+            saveAllData();
+        }
+
+        function createTodoElement(text, id) {
+            const div = document.createElement('div');
+            div.dataset.id = id;
+            div.className = "flex items-center justify-between bg-slate-900/50 p-3 rounded-lg border border-slate-800 group";
+            div.innerHTML = `
+                <span class="text-xs text-slate-300">${text}</span>
+                <button onclick="this.parentElement.remove(); saveAllData();" class="text-slate-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+            `;
+            document.getElementById('todoList').prepend(div);
+            lucide.createIcons();
+        }
+
+        // Start
+        document.getElementById('sDate').valueAsDate = new Date();
+        loadAllData();
+        runQuickCalc();
+    </script>
+</body>
+</html>
